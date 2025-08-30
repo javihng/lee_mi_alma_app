@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "lee_mi_alma_app",
-    "slug": "lee_mi_alma_app",
-    "version": "1.0.0",
+    "name": "Lee mi alma",
+    "slug": "lee-mi-alma",
+    "version": "2.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
+    "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash_square.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -16,14 +16,22 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.shekinahdev.leemialma",
+      "versionCode": 2,
+      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "permissions": []
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8f89a793-9c91-4536-a929-2b879e7c11d1"
+      }
     }
   }
 }
