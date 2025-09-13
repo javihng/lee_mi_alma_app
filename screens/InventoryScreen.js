@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+// screens/InventoryScreen.js
+import React, { useEffect, useMemo, useState } from "react";
 import {
   SafeAreaView,
   View,
@@ -18,14 +19,36 @@ import * as FileSystem from "expo-file-system";
 import XLSX from "xlsx";
 import * as DB from "../db_cloud";
 
+// Formateador de precios en COP
+function formatCOP(value) {
+  try {
+    return new Intl.NumberFormat("es-CO", {
+      style: "currency",
+      currency: "COP",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(Number(value) || 0);
+  } catch {
+    const n = Math.round(Number(value) || 0).toString();
+    return "$ " + n.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  }
+}
+
 export default function InventoryScreen() {
   const [products, setProducts] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [form, setForm] = useState({ name: "", sku: "", price: "", stock: "" });
 
-  // --- Modal de ajuste de stock ---
+  // búsqueda
+  const [search, setSearch] = useState("");
+
+  // Modal de ajuste de stock (+/-)
   const [stockModal, setStockModal] = useState({ visible: false, product: null });
   const [delta, setDelta] = useState("");
+
+  // Modal de edición (name/sku/price/stock absolutos)
+  const [editModal, setEditModal] = useState({ visible: false, product: null });
+  const [editForm, setEditForm] = useState({ name: "", sku: "", price: "", stock: "" });
 
   async function load() {
     const rows = await DB.getProducts();
@@ -33,14 +56,18 @@ export default function InventoryScreen() {
   }
   useEffect(() => { load(); }, []);
 
+  const filteredProducts = useMemo(() => {
+    const term = (search || "").trim().toLowerCase();
+    if (!term) return products;
+    return products.filter((p) => (p.name || "").toLowerCase().includes(term));
+  }, [products, search]);
+
   async function addProduct() {
     if (!form.name || !form.price) return Alert.alert("Nombre y precio son obligatorios");
-    // acepta coma decimal: "12,50" -> "12.50"
     const price = parseFloat(String(form.price).replace(",", "."));
     const stock = parseInt(form.stock || "0", 10);
     if (Number.isNaN(price) || price < 0) return Alert.alert("Precio inválido");
     if (Number.isNaN(stock) || stock < 0) return Alert.alert("Stock inválido");
-
     try {
       await DB.addProduct({ name: form.name, sku: form.sku, price, stock });
       setForm({ name: "", sku: "", price: "", stock: "" });
@@ -54,26 +81,18 @@ export default function InventoryScreen() {
 
   // --- CSV helper: detecta ; o , y maneja BOM y saltos de línea ---
   function parseCSV(text) {
-    // BOM
     if (text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-    // normaliza saltos
     const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim());
     if (lines.length === 0) return [];
-
-    // detecta separador por header
     const sep = lines[0].includes(";") ? ";" : ",";
-
     const headers = lines[0].split(sep).map((h) => h.trim());
     const out = [];
-
     for (let i = 1; i < lines.length; i++) {
       const raw = lines[i].trim();
       if (!raw) continue;
       const cols = raw.split(sep);
       const row = {};
-      headers.forEach((h, idx) => {
-        row[h] = (cols[idx] ?? "").trim();
-      });
+      headers.forEach((h, idx) => { row[h] = (cols[idx] ?? "").trim(); });
       out.push(row);
     }
     return out;
@@ -91,8 +110,7 @@ export default function InventoryScreen() {
         ],
       });
       if (res.canceled) return;
-      const file = res.assets?.[0];
-      if (!file) return;
+      const file = res.assets?.[0]; if (!file) return;
 
       const ext = (file.name || "").toLowerCase().split(".").pop();
       let rows = [];
@@ -110,28 +128,14 @@ export default function InventoryScreen() {
 
       let added = 0;
       for (const r of rows) {
-        const name =
-          (r.name ?? r.Nombre ?? r.nombre ?? "").toString().trim();
-        const sku =
-          (r.sku ??
-            r.SKU ??
-            r.codigo ??
-            r.código ??
-            r["codigo interno"] ??
-            r["código interno"] ??
-            "")?.toString().trim() || null;
-
-        // precio: acepta coma decimal (12,50 -> 12.50)
+        const name = (r.name ?? r.Nombre ?? r.nombre ?? "").toString().trim();
+        const sku  = (r.sku ?? r.SKU ?? r.codigo ?? r.código ?? r["codigo interno"] ?? r["código interno"] ?? "")?.toString().trim() || null;
         const priceRaw = (r.price ?? r.Precio ?? r.precio ?? "").toString().trim();
         const price = Number(priceRaw.replace(",", "."));
-
-        // stock
         const stockRaw = (r.stock ?? r.Stock ?? r.existencias ?? r.cantidad ?? "0").toString().trim();
-        const stockNum = Number(stockRaw.replace(",", ".")); // por si viene "10,0"
+        const stockNum = Number(stockRaw.replace(",", "."));
         const stock = Number.isNaN(stockNum) ? 0 : Math.floor(stockNum);
-
         if (!name || Number.isNaN(price)) continue;
-
         await DB.addProduct({ name, sku, price, stock });
         added++;
       }
@@ -157,6 +161,40 @@ export default function InventoryScreen() {
     }
   }
 
+  function openEdit(product) {
+    setEditForm({
+      name: product.name ?? "",
+      sku: product.sku ?? "",
+      price: String(product.price ?? ""),
+      stock: String(product.stock ?? ""),
+    });
+    setEditModal({ visible: true, product });
+  }
+
+  async function saveEdit() {
+    const p = editModal.product;
+    if (!p) return;
+    if (!editForm.name || !editForm.price) return Alert.alert("Nombre y precio son obligatorios");
+    const price = parseFloat(String(editForm.price).replace(",", "."));
+    const stock = parseInt(editForm.stock || "0", 10);
+    if (Number.isNaN(price) || price < 0) return Alert.alert("Precio inválido");
+    if (Number.isNaN(stock) || stock < 0) return Alert.alert("Stock inválido");
+
+    try {
+      await DB.updateProduct(p.id, {
+        name: editForm.name,
+        sku: editForm.sku || null,
+        price,
+        stock,
+      });
+      await load();
+      setEditModal({ visible: false, product: null });
+      Alert.alert("Producto actualizado");
+    } catch (e) {
+      Alert.alert("Error al actualizar", e?.message || String(e));
+    }
+  }
+
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <View style={styles.header}>
@@ -167,18 +205,28 @@ export default function InventoryScreen() {
         </View>
       </View>
 
+      {/* Buscador */}
+      <TextInput
+        placeholder="Buscar producto..."
+        value={search}
+        onChangeText={setSearch}
+        style={[styles.input, { marginHorizontal: 12, marginBottom: 6 }]}
+        returnKeyType="search"
+      />
+
       <FlatList
-        data={products}
+        data={filteredProducts}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 12 }}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{item.name}</Text>
             <Text>SKU: {item.sku || "-"}</Text>
-            <Text>Precio: {item.price}</Text>
+            <Text>Precio: {formatCOP(item.price)}</Text>
             <Text>Stock: {item.stock}</Text>
 
             <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
+              <Button title="Editar" onPress={() => openEdit(item)} />
               <Button
                 title="Ajustar stock"
                 onPress={() => {
@@ -280,6 +328,64 @@ export default function InventoryScreen() {
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Modal: editar producto */}
+      <Modal
+        visible={editModal.visible}
+        animationType="slide"
+        onRequestClose={() => setEditModal({ visible: false, product: null })}
+      >
+        <SafeAreaView style={{ flex: 1, padding: 16 }}>
+          <Text style={styles.modalTitle}>Editar producto</Text>
+
+          <Text style={styles.label}>Nombre *</Text>
+          <TextInput
+            style={styles.input}
+            value={editForm.name}
+            onChangeText={(v) => setEditForm({ ...editForm, name: v })}
+            returnKeyType="done"
+            blurOnSubmit
+          />
+
+          <Text style={styles.label}>SKU</Text>
+          <TextInput
+            style={styles.input}
+            value={editForm.sku}
+            onChangeText={(v) => setEditForm({ ...editForm, sku: v })}
+            returnKeyType="done"
+            blurOnSubmit
+            placeholder="Opcional"
+          />
+
+          <Text style={styles.label}>Precio *</Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            value={editForm.price}
+            onChangeText={(v) => setEditForm({ ...editForm, price: v })}
+            returnKeyType="done"
+            blurOnSubmit
+            placeholder="Ej: 35000"
+          />
+
+          <Text style={styles.label}>Stock (valor absoluto)</Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            value={editForm.stock}
+            onChangeText={(v) => setEditForm({ ...editForm, stock: v })}
+            returnKeyType="done"
+            blurOnSubmit
+            placeholder="Ej: 10"
+          />
+
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+            <Button title="Cancelar" onPress={() => setEditModal({ visible: false, product: null })} />
+            <View style={{ width: 8 }} />
+            <Button title="Guardar cambios" onPress={saveEdit} />
+          </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );

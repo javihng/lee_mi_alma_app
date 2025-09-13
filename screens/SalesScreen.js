@@ -1,5 +1,16 @@
+// screens/SalesScreen.js
 import React, { useEffect, useState } from "react";
-import { SafeAreaView, View, Text, FlatList, TouchableOpacity, Modal, Button, Alert, StyleSheet } from "react-native";
+import {
+  SafeAreaView,
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  Modal,
+  Button,
+  Alert,
+  StyleSheet,
+} from "react-native";
 import * as DB from "../db_cloud";
 import { exportSalesToCSV } from "../utils/export";
 
@@ -9,7 +20,11 @@ export default function SalesScreen() {
   const [detailItems, setDetailItems] = useState([]);
   const [detailSale, setDetailSale] = useState(null);
 
-  async function load(){ setSales(await DB.getSales()); }
+  async function load() {
+    // Asegúrate de que DB.getSales() devuelva payment_type
+    // (en db_cloud.js: .select("id, datetime, total, payment_type"))
+    setSales(await DB.getSales());
+  }
   useEffect(() => { load(); }, []);
 
   async function openDetail(sale) {
@@ -22,7 +37,7 @@ export default function SalesScreen() {
   async function onExport() {
     try {
       const uri = await exportSalesToCSV();
-      Alert.alert("Exportación lista", "Se generó el CSV y se abrió el diálogo de compartir.");
+      Alert.alert("Exportación lista", "Se generó el CSV.");
       console.log("CSV:", uri);
     } catch (e) {
       Alert.alert("Error exportando", e?.message || String(e));
@@ -30,7 +45,7 @@ export default function SalesScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex:1 }}>
+    <SafeAreaView style={{ flex: 1 }}>
       <View style={styles.header}>
         <Text style={styles.title}>Ventas</Text>
         <Button title="Exportar CSV" onPress={onExport} />
@@ -38,41 +53,65 @@ export default function SalesScreen() {
 
       <FlatList
         data={sales}
-        keyExtractor={(item)=>item.id}
-        contentContainerStyle={{ padding:12 }}
-        renderItem={({ item })=>(
-          <TouchableOpacity onPress={()=>openDetail(item)}>
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ padding: 12 }}
+        renderItem={({ item }) => (
+          <TouchableOpacity onPress={() => openDetail(item)}>
             <View style={styles.card}>
+              {/* Puedes ocultar el ID si no lo quieres ver en UI */}
               <Text style={styles.cardTitle}>{item.id}</Text>
               <Text>Fecha: {new Date(item.datetime).toLocaleString()}</Text>
               <Text>Total: {item.total}</Text>
-              <Text style={{ color:"#007aff", marginTop:6 }}>Ver detalle</Text>
+              {/* NUEVO: mostrar método de pago si existe */}
+              {item.payment_type ? (
+                <Text>Método: {item.payment_type}</Text>
+              ) : null}
+              <Text style={{ color: "#007aff", marginTop: 6 }}>Ver detalle</Text>
             </View>
           </TouchableOpacity>
         )}
       />
 
-      <Modal visible={detailVisible} animationType="slide" onRequestClose={()=>setDetailVisible(false)}>
-        <SafeAreaView style={{ flex:1, padding:16 }}>
+      <Modal
+        visible={detailVisible}
+        animationType="slide"
+        onRequestClose={() => setDetailVisible(false)}
+      >
+        <SafeAreaView style={{ flex: 1, padding: 16 }}>
           <Text style={styles.modalTitle}>Detalle de venta</Text>
           {detailSale && (
             <>
+              {/* Puedes ocultar este ID si no quieres mostrarlo */}
               <Text>ID: {detailSale.id}</Text>
               <Text>Fecha: {new Date(detailSale.datetime).toLocaleString()}</Text>
-              <Text style={{ fontWeight:"600", marginTop:8 }}>Ítems</Text>
+              <Text style={{ fontWeight: "600", marginTop: 8 }}>Ítems</Text>
               <FlatList
                 data={detailItems}
-                keyExtractor={(it)=>it.id}
-                renderItem={({item})=>(
-                  <View style={{ paddingVertical:6, borderBottomWidth:1, borderBottomColor:"#eee" }}>
-                    <Text style={{ fontWeight:"600" }}>{item.product_name}</Text>
-                    <Text>Cant.: {item.quantity}  |  Precio: {item.unit_price}  |  Subtotal: {item.subtotal}</Text>
+                keyExtractor={(it) => it.id}
+                renderItem={({ item }) => (
+                  <View
+                    style={{
+                      paddingVertical: 6,
+                      borderBottomWidth: 1,
+                      borderBottomColor: "#eee",
+                    }}
+                  >
+                    <Text style={{ fontWeight: "600" }}>{item.product_name}</Text>
+                    <Text>
+                      Cant.: {item.quantity}  |  Precio: {item.unit_price}  |  Subtotal: {item.subtotal}
+                    </Text>
                   </View>
                 )}
               />
-              <Text style={{ fontSize:16, fontWeight:"bold", marginTop:12 }}>Total: {detailSale.total}</Text>
-              <View style={{ marginTop:12 }}>
-                <Button title="Cerrar" onPress={()=>setDetailVisible(false)} />
+              <Text style={{ fontSize: 16, fontWeight: "bold", marginTop: 12 }}>
+                Total: {detailSale.total}
+              </Text>
+              {/* NUEVO: mostrar método de pago en el detalle si existe */}
+              {detailSale.payment_type ? (
+                <Text style={{ marginTop: 4 }}>Método: {detailSale.payment_type}</Text>
+              ) : null}
+              <View style={{ marginTop: 12 }}>
+                <Button title="Cerrar" onPress={() => setDetailVisible(false)} />
               </View>
             </>
           )}
@@ -83,9 +122,9 @@ export default function SalesScreen() {
 }
 
 const styles = StyleSheet.create({
-  header:{ flexDirection:"row", justifyContent:"space-between", alignItems:"center", padding:12 },
-  title:{ fontSize:20, fontWeight:"bold" },
-  card:{ backgroundColor:"#fff", padding:12, borderRadius:8, marginBottom:10, elevation:1, shadowOpacity:0.1 },
-  cardTitle:{ fontSize:16, fontWeight:"600", marginBottom:4 },
-  modalTitle:{ fontSize:18, fontWeight:"bold", marginBottom:12 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 12 },
+  title: { fontSize: 20, fontWeight: "bold" },
+  card: { backgroundColor: "#fff", padding: 12, borderRadius: 8, marginBottom: 10, elevation: 1, shadowOpacity: 0.1 },
+  cardTitle: { fontSize: 16, fontWeight: "600", marginBottom: 4 },
+  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 12 },
 });

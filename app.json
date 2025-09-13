@@ -2,10 +2,10 @@
   "expo": {
     "name": "Lee mi alma",
     "slug": "lee-mi-alma",
-    "version": "2.0.0",
+    "version": "4.0.2",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash_square.png",
@@ -13,17 +13,23 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.shekinahdev.leemialma"
     },
     "android": {
       "package": "com.shekinahdev.leemialma",
-      "versionCode": 2,
+      "versionCode": 6,
       "edgeToEdgeEnabled": true,
+      "newArchEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon-foreground.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": []
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

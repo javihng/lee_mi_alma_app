@@ -28,11 +28,53 @@ export async function addCustomer({ name, phone, email, interest }) {
   return data;
 }
 
-export async function getSales() {
-  const { data, error } = await supabase.from("sales").select("*").order("datetime", { ascending: false });
+// Crear venta (envía tipo de pago)
+export async function createSale({ items, paymentType }) {
+  const { data, error } = await supabase.rpc('create_sale', {
+    items,
+    payment_type: paymentType,
+  });
   if (error) throw error;
-  return data;
+  return data; // sale_id
 }
+
+// Lista de ventas (para la UI)
+export async function getSales() {
+  const { data, error } = await supabase
+    .from("sales")
+    .select("id, datetime, total, payment_type")
+    .order("datetime", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+// Ventas detalladas por ÍTEM para exportar (sin sale_id)
+export async function getSalesDetailed() {
+  const { data, error } = await supabase
+    .from("sale_items")
+    .select(`
+      quantity,
+      unit_price,
+      subtotal,
+      sales!inner(datetime, total, payment_type),
+      products!inner(name)
+    `)
+    .order("datetime", { referencedTable: "sales", ascending: false });
+
+  if (error) throw error;
+
+  // Normaliza a un arreglo listo para CSV (SIN sale_id)
+  return (data || []).map((row) => ({
+    fecha: row.sales?.datetime ?? null,
+    producto: row.products?.name ?? "",
+    cantidad: row.quantity ?? 0,
+    precio_unitario: row.unit_price ?? 0,
+    subtotal: row.subtotal ?? 0,
+    total_venta: row.sales?.total ?? 0,
+    metodo_pago: row.sales?.payment_type ?? "", // <<-- incluido
+  }));
+}
+
 
 export async function getSaleItemsBySaleId(saleId) {
   const { data, error } = await supabase
@@ -48,14 +90,6 @@ export async function getSaleItemsBySaleId(saleId) {
     subtotal: r.subtotal,
     product_name: r.products?.name
   }));
-}
-
-// Llama a la función SQL create_sale que definimos en Supabase
-export async function createSale({ items }) {
-  const payload = items.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
-  const { data, error } = await supabase.rpc("create_sale", { items: payload });
-  if (error) throw error;
-  return data; // devuelve el sale_id
 }
 
 // --- Costs ---
@@ -82,6 +116,23 @@ export async function adjustStock(product_id, delta) {
   const { data, error } = await supabase.rpc('adjust_stock', { p_id: product_id, p_delta: delta });
   if (error) throw error;
   return data; // producto actualizado
+}
+
+// Actualiza campos del producto por id (name, sku, price, stock absoluto)
+export async function updateProduct(id, fields) {
+  const patch = { ...fields };
+  if (patch.price !== undefined) patch.price = Number(patch.price);
+  if (patch.stock !== undefined) patch.stock = parseInt(patch.stock, 10);
+
+  const { data, error } = await supabase
+    .from('products')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 }
 
 export function listenProducts(callback) {
